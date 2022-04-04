@@ -1,0 +1,8 @@
+{
+  "terminate_wait_time": 3,
+  "student_list":[
+    { "stu_id": "",
+      "password": ""
+    }
+  ]
+}
