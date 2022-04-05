@@ -148,6 +148,7 @@ func (rc reportClient) ReportHealth() error {
 	form.Credits = "10"
 	form.CityCode = "210000"
 	form.ProvinceCode = "210000"
+	form.Travels = make([]interface{}, 0)
 	payloadBytes, err := json.Marshal(form)
 	if err != nil {
 		return err
@@ -158,12 +159,29 @@ func (rc reportClient) ReportHealth() error {
 		return err
 	}
 	rc.writeCookie(req)
+
+	req.Header.Set("Authority", "e-report.neu.edu.cn")
+	req.Header.Set("Sec-Ch-Ua", "\"Chromium\";v=\"92\", \" Not A;Brand\";v=\"99\", \"Microsoft Edge\";v=\"92\"")
+	req.Header.Set("Dnt", "1")
+	req.Header.Set("X-Xsrf-Token", rc.cookies["XSRF-TOKEN"])
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 Edg/92.0.902.78")
+	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Origin", "https://e-report.neu.edu.cn")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Referer", "https://e-report.neu.edu.cn/mobile/notes/create")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6,zh-TW;q=0.5")
+
 	resp, err := rc.httpClient.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode == 302 {
+	if resp.StatusCode == 201 {
 		_ = rc.queryStudentInfo()
 		log.Printf("[%s][健康上报]已为%s上报成功，当前积分为%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
 	} else {

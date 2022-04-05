@@ -27,16 +27,16 @@
 ```json
 {
   "terminate_wait_time": 3,
-	"student_list": [{
-		"stu_id": "学号1",
-		"password": "密码1"
-	}, {
-		"stu_id": "学号2",
-		"password": "密码2"
-	}, {
-		"stu_id": "学号3",
-		"password": "密码3"
-	}]
+  "student_list": [{
+    "stu_id": "学号1",
+    "password": "密码1"
+  }, {
+    "stu_id": "学号2",
+    "password": "密码2"
+  }, {
+    "stu_id": "学号3",
+    "password": "密码3"
+  }]
 }
 ```
 
