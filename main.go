@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"github.com/rroy233/neuDailyReport/reportClient"
 	"io/ioutil"
 	"log"
@@ -10,7 +11,8 @@ import (
 )
 
 type Config struct {
-	TerminateWaitTime int `json:"terminate_wait_time"`
+	TerminateWaitTime int  `json:"terminate_wait_time"`
+	PasswordEncoded   bool `json:"password_encoded"`
 	StudentList       []struct {
 		StuId    string `json:"stu_id"`
 		Password string `json:"password"`
@@ -21,22 +23,64 @@ var config *Config
 
 func main() {
 	loadConfig()
-	for _, s := range config.StudentList {
-		rc := reportClient.New(s.StuId, s.Password)
-		err := rc.Login()
-		if err != nil {
-			log.Println("[统一身份验证]登录失败：" + err.Error())
-			continue
-		}
-		rc.ReportTemperature(reportClient.Morning)
-		rc.ReportTemperature(reportClient.AfterNoon)
-		rc.ReportTemperature(reportClient.Evening)
 
-		err = rc.ReportHealth()
+	a := flag.Bool("a", false, "Enable Morning temperature-report.")
+	b := flag.Bool("b", false, "Enable Afternoon temperature-report.")
+	c := flag.Bool("c", false, "Enable Evening temperature-report.")
+	d := flag.Bool("d", false, "Enable HealthInfo-report.")
+	t := flag.Bool("t", false, "Test availability of all student accounts ONLY.")
+	flag.Parse()
+
+	//无参数时，默认a,b,c,d全为true
+	if !*t && !(*a || *b || *c || *d) {
+		*a = true
+		*b = true
+		*c = true
+		*d = true
+	}
+
+	for _, s := range config.StudentList {
+		rc, err := reportClient.New(s.StuId, s.Password, config.PasswordEncoded)
 		if err != nil {
-			log.Printf("[%s][健康上报]发生错误:%s\n", rc.StuId, err.Error())
+			log.Printf("[%s][初始化失败]%s\n", s.StuId, err.Error())
 			continue
 		}
+
+		err = rc.Login()
+		if err != nil {
+			log.Printf("[%s][统一身份验证]登录失败：%s\n", s.StuId, err.Error())
+			continue
+		}
+		log.Printf("[%s][统一身份验证]登录成功!\n", s.StuId)
+
+		if *t {
+			err = rc.QueryStudentInfo()
+			if err != nil || rc.StudentInfo == nil {
+				log.Printf("[%s][测试]获取学生信息失败：%s\n", s.StuId, err.Error())
+			} else {
+				log.Printf("[%s][测试]学生账号有效:%s(%s)\n", s.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Xuegonghao)
+			}
+			continue
+		}
+
+		if *a {
+			rc.ReportTemperature(reportClient.Morning)
+		}
+		if *b {
+			rc.ReportTemperature(reportClient.AfterNoon)
+		}
+		if *c {
+			rc.ReportTemperature(reportClient.Evening)
+		}
+
+		if *d {
+			err = rc.ReportHealth()
+			if err != nil {
+				log.Printf("[%s][健康上报]发生错误:%s\n", rc.StuId, err.Error())
+				continue
+			}
+		}
+
 	}
 
 	defer func() {

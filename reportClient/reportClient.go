@@ -2,7 +2,9 @@ package reportClient
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/neucn/neugo"
 	"github.com/rroy233/neuDailyReport/util"
@@ -28,17 +30,25 @@ type reportClient struct {
 	StudentInfo   *StudentInfo
 }
 
-func New(id, pwd string) *reportClient {
+func New(id, pwd string, pwdEncoded bool) (*reportClient, error) {
 	c := new(reportClient)
 	c.StuId = id
-	c.Password = pwd
+	if pwdEncoded {
+		pwdR, err := base64.StdEncoding.DecodeString(pwd)
+		if err != nil {
+			return nil, errors.New("base64解码失败:" + err.Error())
+		}
+		c.Password = string(pwdR)
+	} else {
+		c.Password = pwd
+	}
 	c.httpClient = &http.Client{
 		Jar: nil,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	return c
+	return c, nil
 }
 
 func (rc reportClient) writeCookie(req *http.Request) {
@@ -57,7 +67,6 @@ func (rc *reportClient) Login() error {
 	if err != nil {
 		return err
 	}
-	log.Println("[统一身份验证]登录成功！")
 
 	cookies := make(map[string]string)
 	resp, err := casClient.Get("https://e-report.neu.edu.cn/inspection/items/1/records/create")
@@ -79,6 +88,16 @@ func (rc *reportClient) Login() error {
 }
 
 func (rc reportClient) ReportTemperature(period int) {
+	periodName := ""
+	switch period {
+	case Morning:
+		periodName = "早"
+	case AfterNoon:
+		periodName = "午"
+	case Evening:
+		periodName = "晚"
+	}
+
 	params := url.Values{}
 	params.Add("_token", rc.formCsrfToken)
 	params.Add("temperature", `36.5`)
@@ -92,27 +111,36 @@ func (rc reportClient) ReportTemperature(period int) {
 	}
 
 	rc.writeCookie(req)
+	req.Header.Set("Authority", "e-report.neu.edu.cn")
+	req.Header.Set("Sec-Ch-Ua", "\"Chromium\";v=\"92\", \" Not A;Brand\";v=\"99\", \"Microsoft Edge\";v=\"92\"")
+	req.Header.Set("Dnt", "1")
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 Edg/92.0.902.78")
+	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Origin", "https://e-report.neu.edu.cn")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Referer", "https://e-report.neu.edu.cn/mobile/notes/create")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6,zh-TW;q=0.5")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := rc.httpClient.Do(req)
-
-	periodName := ""
-	switch period {
-	case Morning:
-		periodName = "早"
-	case AfterNoon:
-		periodName = "午"
-	case Evening:
-		periodName = "晚"
+	if err != nil {
+		log.Printf("[%s][体温上报-%s]上报失败-HTTP请求错误：\n", rc.StuId, periodName)
+		return
 	}
-	if resp.StatusCode == 302 {
+
+	if resp.StatusCode == 302 && resp.Header.Get("Location") == "https://e-report.neu.edu.cn/inspection/items" {
 		log.Printf("[%s][体温上报-%s]上报成功！\n", rc.StuId, periodName)
 	} else {
-		log.Printf("[%s][体温上报-%s]上报失败！\n", rc.StuId, periodName)
+		log.Printf("[%s][体温上报-%s]上报失败！可能是当前时段无法上报，请稍后再试。\n", rc.StuId, periodName)
 	}
 }
 
-func (rc *reportClient) queryStudentInfo() error {
+func (rc *reportClient) QueryStudentInfo() error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://e-report.neu.edu.cn/api/profiles/%s", rc.StuId), nil)
 	if err != nil {
 		panic(err)
@@ -121,6 +149,9 @@ func (rc *reportClient) queryStudentInfo() error {
 	rc.writeCookie(req)
 
 	resp, err := rc.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
 
 	stuInfo := new(StudentInfo)
 	err = json.Unmarshal([]byte(util.ReadBody(resp)), stuInfo)
@@ -132,10 +163,13 @@ func (rc *reportClient) queryStudentInfo() error {
 }
 
 func (rc reportClient) ReportHealth() error {
-	err := rc.queryStudentInfo()
+	err := rc.QueryStudentInfo()
 	if err != nil {
 		return err
 	}
+
+	oldCredit := rc.StudentInfo.Data.Credits
+
 	form := new(HealthReportForm)
 	form.Token = rc.formCsrfToken
 	form.JibenxinxiShifoubenrenshangbao = "1"
@@ -177,13 +211,19 @@ func (rc reportClient) ReportHealth() error {
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6,zh-TW;q=0.5")
 
 	resp, err := rc.httpClient.Do(req)
-	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode == 201 {
-		_ = rc.queryStudentInfo()
-		log.Printf("[%s][健康上报]已为%s上报成功，当前积分为%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
+		_ = rc.QueryStudentInfo()
+		if oldCredit < rc.StudentInfo.Data.Credits {
+			log.Printf("[%s][健康上报]已为%s上报成功，当前积分+10=%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
+		} else {
+			log.Printf("[%s][健康上报]%s重复上报，当前积分%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
+		}
+
 	} else {
 		log.Printf("[%s][健康上报]为%s上报失败！\n", rc.StuId, rc.StudentInfo.Data.Xingming)
 	}

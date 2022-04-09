@@ -1,5 +1,6 @@
 {
   "terminate_wait_time": 3,
+  "password_encoded": false,
   "student_list":[
     { "stu_id": "",
       "password": ""
