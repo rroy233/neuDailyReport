@@ -10,9 +10,11 @@ import (
 	"github.com/rroy233/neuDailyReport/util"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const (
@@ -47,6 +49,7 @@ func New(id, pwd string, pwdEncoded bool) (*reportClient, error) {
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
+		Timeout: 10 * time.Second,
 	}
 	return c, nil
 }
@@ -58,7 +61,11 @@ func (rc reportClient) writeCookie(req *http.Request) {
 }
 
 func (rc *reportClient) Login() error {
-	casClient := neugo.NewSession()
+	jar, _ := cookiejar.New(nil)
+	casClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Jar:     jar,
+	}
 	err := neugo.Use(casClient).WithAuth(rc.StuId, rc.Password).Login(neugo.CAS)
 	if err != nil {
 		return err
