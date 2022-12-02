@@ -14,7 +14,7 @@ func initCron() {
 	var err error
 	//6点健康上报，7点/12点/19点体温上报
 	_, err = crontab.AddFunc("00 6 * * ?", cronAutoDo)
-	_, err = crontab.AddFunc("58 7 * * ?", cronAutoDo)
+	_, err = crontab.AddFunc("01 7 * * ?", cronAutoDo)
 	_, err = crontab.AddFunc("02 12 * * ?", cronAutoDo)
 	_, err = crontab.AddFunc("03 19 * * ?", cronAutoDo)
 	if err != nil {
