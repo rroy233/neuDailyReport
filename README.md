@@ -103,10 +103,15 @@ Windows
 
    ```
    ./neuDailyReport
-   或
-   ./neuDailyReport.exe 或 双击可执行文件
    ```
+   或使用自动后台运行脚本(unix)
 
+   ```
+   编译运行：
+   bash buildrun.sh
+   或运行：
+   bash run.sh
+   ```
    
 
 ## 自行编译
