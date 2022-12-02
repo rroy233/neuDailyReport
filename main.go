@@ -43,6 +43,12 @@ var (
 )
 
 func main() {
+	//log
+	logger.New(&logger.Config{
+		StdOutput:      true,
+		StoreLocalFile: true,
+	})
+
 	loadConfig()
 
 	a = flag.Bool("a", false, "Enable Morning temperature-report.")
@@ -51,12 +57,6 @@ func main() {
 	d = flag.Bool("d", false, "Enable HealthInfo-report.")
 	t = flag.Bool("t", false, "Test availability of all student accounts ONLY.")
 	flag.Parse()
-
-	//log
-	logger.New(&logger.Config{
-		StdOutput:      true,
-		StoreLocalFile: true,
-	})
 
 	if *t == true {
 		testAccount()
