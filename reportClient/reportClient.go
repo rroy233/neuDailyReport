@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/neucn/neugo"
+	"github.com/rroy233/logger"
 	"github.com/rroy233/neuDailyReport/util"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -17,13 +17,17 @@ import (
 	"time"
 )
 
+type Period int
+
 const (
-	Morning   = 1
-	AfterNoon = 2
-	Evening   = 3
+	All          = Period(0)
+	Morning      = Period(1)
+	AfterNoon    = Period(2)
+	Evening      = Period(3)
+	HealthReport = Period(4)
 )
 
-type reportClient struct {
+type ReportClient struct {
 	StuId         string
 	Password      string
 	httpClient    *http.Client
@@ -32,8 +36,8 @@ type reportClient struct {
 	StudentInfo   *StudentInfo
 }
 
-func New(id, pwd string, pwdEncoded bool) (*reportClient, error) {
-	c := new(reportClient)
+func New(id, pwd string, pwdEncoded bool) (*ReportClient, error) {
+	c := new(ReportClient)
 	c.StuId = id
 	if pwdEncoded {
 		pwdR, err := base64.StdEncoding.DecodeString(pwd)
@@ -54,13 +58,13 @@ func New(id, pwd string, pwdEncoded bool) (*reportClient, error) {
 	return c, nil
 }
 
-func (rc reportClient) writeCookie(req *http.Request) {
+func (rc *ReportClient) writeCookie(req *http.Request) {
 	req.AddCookie(&http.Cookie{Name: "XSRF-TOKEN", Value: rc.cookies["XSRF-TOKEN"]})
 	req.AddCookie(&http.Cookie{Name: "PHPSESSID", Value: rc.cookies["PHPSESSID"]})
 	req.AddCookie(&http.Cookie{Name: "laravel3_session", Value: rc.cookies["laravel3_session"]})
 }
 
-func (rc *reportClient) Login() error {
+func (rc *ReportClient) Login() error {
 	jar, _ := cookiejar.New(nil)
 	casClient := &http.Client{
 		Timeout: 10 * time.Second,
@@ -94,7 +98,7 @@ func (rc *reportClient) Login() error {
 	return nil
 }
 
-func (rc reportClient) ReportTemperature(period int) {
+func (rc *ReportClient) ReportTemperature(period Period) error {
 	periodName := ""
 	switch period {
 	case Morning:
@@ -114,7 +118,7 @@ func (rc reportClient) ReportTemperature(period int) {
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("https://e-report.neu.edu.cn/inspection/items/%d/records", period), body)
 	if err != nil {
-		panic(err)
+		return errors.New(fmt.Sprintf("[%s][体温上报-%s]上报失败-NewRequest错误：%s\n", rc.StuId, periodName, err.Error()))
 	}
 
 	rc.writeCookie(req)
@@ -136,18 +140,18 @@ func (rc reportClient) ReportTemperature(period int) {
 
 	resp, err := rc.httpClient.Do(req)
 	if err != nil {
-		log.Printf("[%s][体温上报-%s]上报失败-HTTP请求错误：\n", rc.StuId, periodName)
-		return
+		return errors.New(fmt.Sprintf("[%s][体温上报-%s]上报失败-HTTP请求错误：\n", rc.StuId, periodName))
 	}
 
 	if resp.StatusCode == 302 && resp.Header.Get("Location") == "https://e-report.neu.edu.cn/inspection/items" {
-		log.Printf("[%s][体温上报-%s]上报成功！\n", rc.StuId, periodName)
+		logger.Info.Printf("[%s][体温上报-%s]上报成功！\n", rc.StuId, periodName)
 	} else {
-		log.Printf("[%s][体温上报-%s]上报失败！可能是当前时段无法上报，请稍后再试。\n", rc.StuId, periodName)
+		logger.Info.Printf("[%s][体温上报-%s]上报失败！可能是当前时段无法上报，请稍后再试。\n", rc.StuId, periodName)
 	}
+	return nil
 }
 
-func (rc *reportClient) QueryStudentInfo() error {
+func (rc *ReportClient) QueryStudentInfo() error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://e-report.neu.edu.cn/api/profiles/%s", rc.StuId), nil)
 	if err != nil {
 		panic(err)
@@ -169,7 +173,7 @@ func (rc *reportClient) QueryStudentInfo() error {
 	return err
 }
 
-func (rc reportClient) ReportHealth() error {
+func (rc *ReportClient) ReportHealth() error {
 	err := rc.QueryStudentInfo()
 	if err != nil {
 		return err
@@ -226,13 +230,13 @@ func (rc reportClient) ReportHealth() error {
 	if resp.StatusCode == 201 {
 		_ = rc.QueryStudentInfo()
 		if oldCredit < rc.StudentInfo.Data.Credits {
-			log.Printf("[%s][健康上报]已为%s上报成功，当前积分+10=%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
+			logger.Info.Printf("[%s][健康上报]已为%s上报成功，当前积分+10=%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
 		} else {
-			log.Printf("[%s][健康上报]%s重复上报，当前积分%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
+			logger.Info.Printf("[%s][健康上报]%s重复上报，当前积分%d！\n", rc.StuId, rc.StudentInfo.Data.Xingming, rc.StudentInfo.Data.Credits)
 		}
 
 	} else {
-		log.Printf("[%s][健康上报]为%s上报失败！\n", rc.StuId, rc.StudentInfo.Data.Xingming)
+		logger.Error.Printf("[%s][健康上报]为%s上报失败！\n", rc.StuId, rc.StudentInfo.Data.Xingming)
 	}
 	return err
 }

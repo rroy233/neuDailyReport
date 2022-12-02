@@ -54,6 +54,8 @@ password_encoded: 配置文件中的**学生密码**是否经过[base64编码](h
 
 ### 运行使用
 
+> 由于东B限制，外网IP可能无法正常完成上报
+
 Mac or Linux
 
 ```shell
@@ -76,12 +78,12 @@ Windows
 -t 仅验证学生账号可用性
 -help 帮助
 
-（如执行时不输入参数，则默认执行所有上报项）
+（如执行时不输入参数，则常驻内存运行自动按计划上报）
 ```
 
 例如：
 
-1. 执行【体温上报-早】+【健康上报】
+1. 立即执行【体温上报-早】+【健康上报】
 
    ```shell
    ./neuDailyReport -a -d
@@ -89,7 +91,7 @@ Windows
    ./neuDailyReport.exe -a -d
    ```
 
-2. 执行【体温上报-午】
+2. 立即执行【体温上报-午】
 
    ```shell
    ./neuDailyReport -b
@@ -97,7 +99,7 @@ Windows
    ./neuDailyReport.exe -b
    ```
 
-3. 默认执行所有上报项
+3. 常驻内存运行
 
    ```
    ./neuDailyReport
